@@ -2,9 +2,12 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
+import { SyncModule } from './modules/sync/sync.module';
+import { PrismaModule } from './modules/database/prisma.module';
+import { ProductModule } from './modules/product/product.module';
 
 @Module({
-  imports: [ConfigModule.forRoot()],
+  imports: [ConfigModule.forRoot(), SyncModule, PrismaModule, ProductModule],
   controllers: [AppController],
   providers: [AppService],
 })
