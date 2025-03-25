@@ -1,0 +1,68 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+// generator client {
+//   provider = "prisma-client-js"
+// }
+
+// datasource db {
+//   provider = "postgresql"
+//   url      = env("DATABASE_URL")
+// }
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Partner {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  apiEndpoint String
+  lastFetched DateTime?
+  syncLogs    SyncLog[]
+}
+
+model Slots {
+  id              Int               @id @default(autoincrement())
+  startTime       String
+  startDate       String
+  remaining       Int
+  paxAvailibility PaxAvailibility[]
+}
+
+model PaxAvailibility {
+  id          Int     @id @default(autoincrement())
+  type        String
+  name        String?
+  description String?
+  price       Price   @relation(fields: [priceId], references: [id])
+  Slots       Slots?  @relation(fields: [slotsId], references: [id])
+  slotsId     Int?
+  priceId     Int
+}
+
+model Price {
+  id              Int               @id @default(autoincrement())
+  finalPrice      Int
+  currencyCode    String
+  originalPrice   Int
+  PaxAvailibility PaxAvailibility[]
+}
+
+model SyncLog {
+  id           Int       @id @default(autoincrement())
+  partner      Partner   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  partnerId    Int
+  syncStarted  DateTime  @default(now())
+  syncFinished DateTime?
+  status       String    @default("pending")
+  errorMessage String?
+}
