@@ -14,13 +14,15 @@ export class ApiService {
     this.partnerApiToken = process.env.PARTNER_API_TOKEN;
   }
 
-  fetchInventoryData(dateString: string, productId: number): Observable<any> {
+  fetchInventoryData( productId: number,dateString: string): Observable<any> {
     const url = `${this.partnerApi}/${productId}?date=${dateString}`;
     const config: AxiosRequestConfig = {
       headers: {
         'x-auth-token': this.partnerApiToken,
       },
     };
+    return this.httpService.get('./mock-data.json', config);
+ 
     return this.httpService.get(url, config);
   }
 }

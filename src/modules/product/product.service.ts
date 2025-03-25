@@ -15,4 +15,15 @@ export class ProductService {
       data: product,
     });
   }
+
+  async updateProduct(
+    product: Prisma.ProductUpdateInput,
+    update: Prisma.ProductWhereUniqueInput,
+  ) {
+    console.debug("Update ",update)
+    return this.prisma.product.update({
+      data: product,
+      where: update,
+    });
+  }
 }

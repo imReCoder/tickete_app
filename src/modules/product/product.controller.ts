@@ -1,5 +1,5 @@
 import { Controller, Get, Post } from '@nestjs/common';
-import { Body } from '@nestjs/common/decorators';
+import { Body, Param, Patch } from '@nestjs/common/decorators';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { ProductService } from './product.service';
@@ -16,5 +16,10 @@ export class ProductController {
   @Post('/add')
   async addProduct(@Body() product: Prisma.ProductCreateInput) {
     return this.productService.addProduct(product)
+  }
+
+  @Patch('/update/:id')
+  async updateProduct(@Param('id') id :number,@Body() product: Prisma.ProductUpdateInput) {
+    return this.productService.updateProduct(product,{id:Number(id)})
   }
 }
