@@ -6,9 +6,10 @@ import { JobService } from './job.service';
 import { HttpModule } from '@nestjs/axios';
 import { ApiService } from './api.service';
 import { ProductModule } from '../product/product.module';
+import { QueueService } from './queue.service';
 
 @Module({
   imports: [PrismaModule, ScheduleModule.forRoot(), HttpModule, ProductModule],
-  providers: [SyncService, JobService, ApiService],
+  providers: [QueueService,SyncService, JobService, ApiService],
 })
 export class SyncModule {}
