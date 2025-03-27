@@ -6,6 +6,8 @@ import * as dayjs from 'dayjs';
 import { QueueService } from './queue.service';
 import { firstValueFrom } from 'rxjs';
 import { SlotsService } from '../experience/slots/slots.service';
+import { ConfigService } from '@nestjs/config';
+import { IConfiguration } from 'src/common/interfaces/configuration.interface';
 
 @Injectable()
 export class SyncService {
@@ -19,13 +21,14 @@ export class SyncService {
     private readonly productService: ProductService,
     private readonly apiService: ApiService,
     private queueService: QueueService,
-    private prisma:PrismaService,
-    private slotsService:SlotsService
+    private prisma: PrismaService,
+    private slotsService: SlotsService,
+    private cs: ConfigService<IConfiguration>,
   ) {
-    this.API_BATCH_SIZE = process.env.API_BATCH_SIZE || 5;
-    this.RATE_LIMIT_PER_MINUTE = process.env.RATE_LIMIT_PER_MINUTE;
+    this.API_BATCH_SIZE = this.cs.get<number>('batchSize');
+    this.RATE_LIMIT_PER_MINUTE = this.cs.get<number>('rateLimit');
     this.logger.log(
-      `[Syn Info] - Rate Limit : ${this.RATE_LIMIT_PER_MINUTE} | Batch Size : ${this.API_BATCH_SIZE}`,
+      `Rate Limit : ${this.RATE_LIMIT_PER_MINUTE} | Batch Size : ${this.API_BATCH_SIZE}`,
     );
     this.rateLimitInfo = this.calculateRateLimit(
       this.RATE_LIMIT_PER_MINUTE,
@@ -63,12 +66,6 @@ export class SyncService {
     for (const date of upcomingDays) {
       await this._processProductsForDate(products, date);
     }
-  }
-
-  private _generateUpcomingDays(days: number, skipDays: number): dayjs.Dayjs[] {
-    return Array.from({ length: days || 1 }, (_, i) =>
-      dayjs().add(i + skipDays, 'day'),
-    );
   }
 
   private async _processProductsForDate(
@@ -115,11 +112,13 @@ export class SyncService {
 
   private async _processBatch(tasks) {
     const batchResults = await Promise.allSettled(
-      tasks.map((task) =>firstValueFrom(
-        this.apiService.fetchInventoryData(
-          task.payload.product.productId,
-          task.payload.date,
-        )),
+      tasks.map((task) =>
+        firstValueFrom(
+          this.apiService.fetchInventoryData(
+            task.payload.product.productId,
+            task.payload.date,
+          ),
+        ),
       ),
     );
 
@@ -130,13 +129,19 @@ export class SyncService {
     this.logger.log(
       `Processed  | Fetched : ${successfulData.length} data , Total : ${tasks.length} | Remaining : ${this.queueService.getQueueLength()}`,
     );
-    console.log("success data ",successfulData);
-    await this.syncApiData(successfulData)
+    console.log('success data ', successfulData);
+    await this.syncApiData(successfulData);
     await this.delay(this.rateLimitInfo.delayPerBatch);
   }
 
-  private async syncApiData(apiData:any[]){
-  await this.slotsService.bulkUpsertSlots(apiData);
+  private async syncApiData(apiData: any[]) {
+    await this.slotsService.bulkUpsertSlots(apiData);
+  }
+
+  private _generateUpcomingDays(days: number, skipDays: number): dayjs.Dayjs[] {
+    return Array.from({ length: days || 1 }, (_, i) =>
+      dayjs().add(i + skipDays, 'day'),
+    );
   }
 
   private calculateRateLimit(rateLimitPerMinute: number, batchSize: number) {

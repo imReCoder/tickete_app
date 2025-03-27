@@ -6,9 +6,16 @@ import { SyncModule } from './modules/sync/sync.module';
 import { PrismaModule } from './modules/database/prisma.module';
 import { ProductModule } from './modules/product/product.module';
 import { ExperienceModule } from './modules/experience/experience.module';
+import configuration from './config/configuration';
 
 @Module({
-  imports: [ConfigModule.forRoot(), SyncModule, PrismaModule, ProductModule, ExperienceModule],
+  imports: [
+    ConfigModule.forRoot({load:[configuration]}),
+    SyncModule,
+    PrismaModule,
+    ProductModule,
+    ExperienceModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
