@@ -37,6 +37,11 @@ class PaxAvailibilityDto {
 }
 
 export class CreateSlotDto {
+  
+  @Expose()
+  @IsString()
+  providerSlotId:string
+
   @Expose()
   @IsString()
   startTime: string;

@@ -8,7 +8,7 @@ export class JobService {
   constructor(private readonly syncService: SyncService,private schedulerRegistry: SchedulerRegistry) {}
 
   // Every 5 second for today
-  @Cron(CronExpression.EVERY_10_SECONDS, {
+  @Cron(CronExpression.EVERY_MINUTE, {
     name: EJobs.JOB_10_SECONDS,
   })
   onEverySecondTrigger() {
@@ -42,11 +42,11 @@ export class JobService {
     console.log('1 Day triggered');
   }
 
-  @Timeout(12*1000)
+  @Timeout(11*1000)
   clearCron(){
-    const jobName = EJobs.JOB_10_SECONDS;
-    const job = this.schedulerRegistry.getCronJob(jobName);
-    job.stop();
-    console.log(`Job ${jobName} - stopped`);
+    // const jobName = EJobs.JOB_10_SECONDS;
+    // const job = this.schedulerRegistry.getCronJob(jobName);
+    // job.stop();
+    // console.log(`Job ${jobName} - stopped`);
   }
 }

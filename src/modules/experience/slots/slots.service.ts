@@ -9,83 +9,67 @@ import { PrismaService } from 'src/modules/database/prisma.service';
 export class SlotsService {
   constructor(private prisma: PrismaService) {}
 
-  async bulkUpsertSlots(slotsBatch: any[], batchSize: number = 50) {
-    console.log("Slots Batch Received",slotsBatch)
+  // will receive all slots for a prodcut for specific date
+  async bulkUpsertSlots(slotsBatch: {data:[],productId:number,date:string}[], batchSize: number = 50) {
+    console.log('Slots Batch Received', slotsBatch);
     // Flatten batch data
-    const slots = slotsBatch.flatMap(({ productId, data }) =>
+    const allSlots = slotsBatch.flatMap(({ productId, data }) =>
       data.map((slot: any) => ({ ...slot, productId })),
     );
+    const allProductId = slotsBatch.map(slot=>slot.productId);
+    const allDates = slotsBatch.map(slot=>slot.date)
 
     // Process in batches to prevent DB overload
-    for (let i = 0; i < slots.length; i += batchSize) {
-      const batch = slots.slice(i, Math.min(i + batchSize,slots.length));
-
-      // Step 1: Fetch existing slots (only relevant ones)
-      const existingSlots = await this.prisma.slots.findMany({
-        where: {
-          OR: batch.map((slot) => ({
-            productId: slot.productId,
-            startDate: slot.startDate,
-            startTime: slot.startTime,
-          })),
-        },
-        select: {
-          productId: true,
-          startDate: true,
-          startTime: true,
-        },
-      });
-
-      // Step 2: Create lookup set for fast checking
-      const existingSet = new Set(
-        existingSlots.map(
-          (slot) => `${slot.productId}-${slot.startDate}-${slot.startTime}`,
-        ),
-      );
-
-      // Step 3: Separate inserts & updates
-      const toInsert = batch.filter(
-        (slot) => !existingSet.has(`${slot.productId}-${slot.startDate}-${slot.startTime}`),
-      ).map(slot=>  this.convertToDto(slot));
-
-      const toUpdate = batch.filter((slot) =>
-        existingSet.has(`${slot.productId}-${slot.startDate}-${slot.startTime}`),
-      ).map(slot=>  this.convertToDto(slot));;
-    console.log(`To Insert : ${toInsert.length}`)
-    console.log(`To Update : ${toUpdate.length}`)
-console.log("To insert",toInsert)
-      // Step 4: Bulk Insert for new records
-      if (toInsert.length > 0) {
-        await this.prisma.slots.createMany({
-          data:toInsert as Prisma.SlotsCreateManyInput[]
-        });
-      }
-
-      // Step 5: Bulk Update for existing records
-      if (toUpdate.length > 0) {
-        await Promise.all(
-          toUpdate.map((slot) =>
-            this.prisma.slots.updateMany({
-              where: {
-                productId: slot.productId,
-                startDate: slot.startDate,
-                startTime: slot.startTime,
-              },
-              data: { ...slot },
-            }),
-          ),
-        );
-      }
+    for (let i = 0; i < allSlots.length; i += batchSize) {
+      const batch = allSlots.slice(i, Math.min(i + batchSize, allSlots.length)).map((slot) => this.convertToDto(slot));;
+        console.log(batch);
+         await this.bulkUpsertSlotsIntoDb(batch)
     }
+
+    // once everything is upserted , we can check for that productid and date and delete the extra slots
+    const slotsId = allSlots.map(s=>s.providerSlotId);
+    await this.bulkDeleteAdditionalSlots(slotsId,allProductId,allDates);
   }
 
+  async bulkUpsertSlotsIntoDb(slots) {
+    const result = await this.prisma.$queryRaw`
+    INSERT INTO "Slots" ("providerSlotId","startDate","startTime", "remaining","productId")
+    VALUES ${Prisma.join(
+      slots.map(
+        (slot) =>
+          Prisma.sql`(${slot.providerSlotId},${slot.startDate},${slot.startTime}, ${slot.remaining},${slot.productId})`,
+      ),
+    )}
+    ON CONFLICT ("providerSlotId") DO UPDATE
+    SET "startTime" = EXCLUDED."startTime",
+        "remaining" = EXCLUDED."remaining";
+  `;
+    console.log("Upsert Result: ",result);
+  }
 
-   convertToDto(input: any) {
-
-    const dtoInstance = plainToInstance(CreateSlotDto, input,{
-        excludeExtraneousValues: true
+  private async bulkDeleteAdditionalSlots(slotsIdToKeep:string[],allProductId:number[],allDates:string[]){
+    console.log("Delete all slots not in ",slotsIdToKeep,allProductId,allDates);
+    const checkSlots = await this.prisma.slots.findMany({
+        where: {
+          productId: { in: allProductId },
+          startDate: { in: allDates },
+        },
       });
+      console.log('Slots found before delete:', checkSlots);
+    const result = await this.prisma.slots.deleteMany({
+        where: {
+          productId:{in:allProductId},
+          startDate:{in:allDates},
+          providerSlotId: { notIn: slotsIdToKeep }, // Delete everything except the slotsToKeep
+        },
+      });
+      console.log("Delete result ",result)
+  }
+
+  convertToDto(input: any) {
+    const dtoInstance = plainToInstance(CreateSlotDto, input, {
+      excludeExtraneousValues: true,
+    });
     return dtoInstance;
   }
-  
 }
