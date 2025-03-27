@@ -1,10 +1,11 @@
-import { Type } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 import {
   IsString,
   IsInt,
   IsOptional,
   IsArray,
   ValidateNested,
+  IsIn,
 } from 'class-validator';
 
 class PriceDto {
@@ -36,18 +37,25 @@ class PaxAvailibilityDto {
 }
 
 export class CreateSlotDto {
+  @Expose()
   @IsString()
   startTime: string;
 
+  @Expose()
   @IsString()
   startDate: string;
 
+  @Expose()
   @IsInt()
   remaining: number;
 
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => PaxAvailibilityDto)
-  paxAvailibility?: PaxAvailibilityDto[];
+  @Expose()
+  @IsInt()
+  productId:number
+
+  // @IsOptional()
+  // @IsArray()
+  // @ValidateNested({ each: true })
+  // @Type(() => PaxAvailibilityDto)
+  // paxAvailibility?: PaxAvailibilityDto[];
 }

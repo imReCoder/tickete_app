@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { ApiService } from './api.service';
 import { ProductService } from '../product/product.service';
 import * as dayjs from 'dayjs';
 import { QueueService } from './queue.service';
+import { firstValueFrom } from 'rxjs';
+import { SlotsService } from '../experience/slots/slots.service';
 
 @Injectable()
 export class SyncService {
@@ -11,22 +13,25 @@ export class SyncService {
   private readonly RATE_LIMIT_PER_MINUTE;
 
   private readonly rateLimitInfo;
+  private readonly logger = new Logger(SyncService.name);
 
   constructor(
     private readonly productService: ProductService,
     private readonly apiService: ApiService,
     private queueService: QueueService,
+    private prisma:PrismaService,
+    private slotsService:SlotsService
   ) {
     this.API_BATCH_SIZE = process.env.API_BATCH_SIZE || 5;
     this.RATE_LIMIT_PER_MINUTE = process.env.RATE_LIMIT_PER_MINUTE;
-    console.debug(
+    this.logger.log(
       `[Syn Info] - Rate Limit : ${this.RATE_LIMIT_PER_MINUTE} | Batch Size : ${this.API_BATCH_SIZE}`,
     );
     this.rateLimitInfo = this.calculateRateLimit(
       this.RATE_LIMIT_PER_MINUTE,
       this.API_BATCH_SIZE,
     );
-    this.processNextTask();
+    this.processNextBatch();
   }
 
   //every 15 minutes
@@ -44,76 +49,77 @@ export class SyncService {
     this._fetchInventoryForDays(30);
   }
 
-  private async _fetchInventoryForDays(days: number, skipDays: number = 1) {
-    console.debug(`Fetching for ${days} Days`);
-    const products = await this.productService.getAllProducts();
-    console.debug(`Total products available: ${products.length}`);
+  private async _fetchInventoryForDays(
+    days: number,
+    skipDays: number = 1,
+  ): Promise<void> {
+    this.logger.warn(`Triggered: Fetching inventory for ${days} days`);
 
-    const today = dayjs();
-    const upcomingDays = Array.from({ length: days || 1 }, (_, i) =>
-      today.add(i + skipDays, 'day'),
-    );
+    const products = await this.productService.getAllProducts();
+    this.logger.log(`Total products available: ${products.length}`);
+
+    const upcomingDays = this._generateUpcomingDays(days, skipDays);
 
     for (const date of upcomingDays) {
-      const dayName = date.format('ddd');
-      const formattedDate = date.format('YYYY-MM-DD');
-
-      const availableProducts = products.filter((product) =>
-        product.days.includes(dayName),
-      );
-
-      // console.log(
-      //   `\nDate: ${formattedDate} (${dayName}) - ${availableProducts.length} products available`,
-      // );
-
-      if (!availableProducts.length) {
-        console.debug(
-          `\nSkipping for Date: ${formattedDate} (${dayName}) - ${availableProducts.length} products available`,
-        );
-        continue;
-      }
-
-     
-      await this.addProductBatchesInQueue(availableProducts, date);
+      await this._processProductsForDate(products, date);
     }
   }
 
-  public async addProductBatchesInQueue(products: any[], date: dayjs.Dayjs) {
-  
+  private _generateUpcomingDays(days: number, skipDays: number): dayjs.Dayjs[] {
+    return Array.from({ length: days || 1 }, (_, i) =>
+      dayjs().add(i + skipDays, 'day'),
+    );
+  }
 
+  private async _processProductsForDate(
+    products: any[],
+    date: dayjs.Dayjs,
+  ): Promise<void> {
     const dayName = date.format('ddd');
     const formattedDate = date.format('YYYY-MM-DD');
-    console.debug(
-      `\nAdding for Date: ${formattedDate} (${dayName}) - ${products.length} products available`,
+
+    const availableProducts = products.filter((product) =>
+      product.days.includes(dayName),
     );
 
-    const batchSize = this.rateLimitInfo.maxPossibleBatch;
-    for (let i = 0; i < products.length; i += batchSize) {
-      const batch = products.slice(i, i + batchSize);
-      const batchNumber = i / batchSize + 1;
-      const taskId = this.getTaskId(formattedDate,batchNumber);
-     console.debug(`Add Batch: ${batchNumber} | Products : ${batch.length}`)
-      this.queueService.addToQueue(
-        taskId,
-        { batch, date:formattedDate },
+    if (availableProducts.length === 0) {
+      this.logger.log(
+        `Skipping ${formattedDate} (${dayName}) - No products available`,
       );
+      return;
+    }
+
+    await this._addProductsToQueue(availableProducts, formattedDate);
+  }
+
+  private async _addProductsToQueue(
+    products: any[],
+    formattedDate: string,
+  ): Promise<void> {
+    for (const product of products) {
+      const taskId = this.getTaskId(product.productId, formattedDate);
+      this.logger.debug(`Adding product to queue: ${taskId}`);
+      this.queueService.addToQueue(taskId, { product, date: formattedDate });
     }
   }
 
-  
-  processNextTask() {
-    this.queueService.getNextTask().then(async (task) => {
-      console.log(`\nProcessing task : ${task.taskId}`);
-      await this._processBatch(task);
-      this.processNextTask();
-    });
+  processNextBatch() {
+    this.queueService
+      .getNextBatch(this.API_BATCH_SIZE, 3000)
+      .then(async (tasks) => {
+        console.log(`Processing `, tasks);
+        await this._processBatch(tasks);
+        this.processNextBatch();
+      });
   }
 
-  private async _processBatch(task) {
-    const { batch, date } = task.payload;
+  private async _processBatch(tasks) {
     const batchResults = await Promise.allSettled(
-      batch.map((product) =>
-        this.apiService.fetchInventoryData(product.productId, date),
+      tasks.map((task) =>firstValueFrom(
+        this.apiService.fetchInventoryData(
+          task.payload.product.productId,
+          task.payload.date,
+        )),
       ),
     );
 
@@ -121,10 +127,16 @@ export class SyncService {
       .filter((result) => result.status === 'fulfilled')
       .map((result: any) => result.value);
 
-    console.log(
-      `Processed Task Id : ${task.taskId} | Fetched : ${successfulData.length} data , Total : ${batch.length}`,
+    this.logger.log(
+      `Processed  | Fetched : ${successfulData.length} data , Total : ${tasks.length} | Remaining : ${this.queueService.getQueueLength()}`,
     );
+    console.log("success data ",successfulData);
+    await this.syncApiData(successfulData)
     await this.delay(this.rateLimitInfo.delayPerBatch);
+  }
+
+  private async syncApiData(apiData:any[]){
+  await this.slotsService.bulkUpsertSlots(apiData);
   }
 
   private calculateRateLimit(rateLimitPerMinute: number, batchSize: number) {
@@ -136,11 +148,11 @@ export class SyncService {
 
   // move to utility
   private async delay(ms) {
-    console.debug(`Waiting for ${ms}ms.....`);
+    this.logger.log(`Waiting for ${ms}ms.....`);
     return await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  private getTaskId(dateString:string,batchNumber:number){
-    return `${dateString}-B${batchNumber}`
+  private getTaskId(productId: number, dateString: string) {
+    return `${productId}_${dateString}`;
   }
 }

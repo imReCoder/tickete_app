@@ -14,7 +14,7 @@
 // }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -38,10 +38,14 @@ model Product {
 
 model Slots {
   id              Int               @id @default(autoincrement())
+  productId       Int
   startTime       String
   startDate       String
   remaining       Int
   paxAvailibility PaxAvailibility[]
+  
+  @@unique([productId, startDate, startTime]) // Ensure uniqueness
+  @@index([productId, startDate, startTime])  // Indexing for fast lookups
 }
 
 model PaxAvailibility {

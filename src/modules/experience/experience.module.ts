@@ -4,6 +4,7 @@ import { PrismaModule } from '../database/prisma.module';
 
 @Module({
   imports:[PrismaModule],
-  providers: [SlotsService]
+  providers: [SlotsService],
+  exports:[SlotsService]
 })
 export class ExperienceModule {}
