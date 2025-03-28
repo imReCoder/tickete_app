@@ -28,21 +28,6 @@ export class ApiService {
         'x-api-key': this.partnerApiToken,
       },
     };
-    // console.log("Date string ",dateString)
-    // if(dateString == "2025-03-31"){
-    //   return of({data:mockData31.map(d=>({...d,providerSlotId:`${d.providerSlotId}-${productId}`})),productId}); 
-    // }else if(dateString=="2025-04-01"){
-    //   return of({data:mockData01.map(d=>({...d,providerSlotId:`${d.providerSlotId}-${productId}`})),productId}); 
-
-    // }
-    // else if(dateString == "2025-04-02"){
-    //   return of({data:mockData02.map(d=>({...d,providerSlotId:`${d.providerSlotId}-${productId}`})),productId}); 
-    // }else{
-    //   return of({data:[],productId})
-    // }
-// if(productId==14){
-//   return this.httpService.get(url,config).pipe(map(res=>res.data),map(data=>({data:data[0]?[data[0]]:[],productId,date:dateString})));
-// }
     return this.httpService.get(url,config).pipe(map(res=>res.data),map(data=>({data,productId,date:dateString})));
   }
 }
