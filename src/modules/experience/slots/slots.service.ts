@@ -20,7 +20,11 @@ export class SlotsService {
         startDate:date
       },
       include:{
-        paxAvailibility:true
+        paxAvailibility:{
+          include:{
+            price:true
+          }
+        },
       }
     })
   }
