@@ -34,4 +34,9 @@ export class QueueService {
   public getQueueLength() {
     return this.taskQueue.length;
   }
+
+  public clearQueue(){
+    clearTimeout(this.timeout);
+    return this.taskQueue.length = 0;
+  }
 }

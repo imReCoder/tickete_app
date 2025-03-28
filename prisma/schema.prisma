@@ -4,15 +4,6 @@
 // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
-// generator client {
-//   provider = "prisma-client-js"
-// }
-
-// datasource db {
-//   provider = "postgresql"
-//   url      = env("DATABASE_URL")
-// }
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -20,14 +11,6 @@ datasource db {
 
 generator client {
   provider = "prisma-client-js"
-}
-
-model Partner {
-  id          Int       @id @default(autoincrement())
-  name        String    @unique
-  apiEndpoint String
-  lastFetched DateTime?
-  syncLogs    SyncLog[]
 }
 
 model Product {
@@ -57,26 +40,21 @@ model PaxAvailibility {
   min         Int?
   max         Int?
   Slots       Slots   @relation(fields: [slotId], references: [providerSlotId], onDelete: Cascade)
-  price       Price?   
+  price       Price?
 
   @@unique([slotId, type])
   @@index([slotId, type])
 }
 
 model Price {
-  id              Int              @id
+  id              Int             @id
   finalPrice      Int
   currencyCode    String
   originalPrice   Int
-  PaxAvailibility PaxAvailibility @relation(fields: [id], references: [id],onDelete: Cascade)
+  PaxAvailibility PaxAvailibility @relation(fields: [id], references: [id], onDelete: Cascade)
 }
 
-model SyncLog {
-  id           Int       @id @default(autoincrement())
-  partner      Partner   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  partnerId    Int
-  syncStarted  DateTime  @default(now())
-  syncFinished DateTime?
-  status       String    @default("pending")
-  errorMessage String?
+model SynSettings {
+  id     Int     @id @default(autoincrement())
+  enable Boolean
 }

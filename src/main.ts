@@ -4,7 +4,7 @@ import { VersioningType } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
-    logger: ['debug', 'error', 'log', 'verbose'],
+    logger: ['debug', 'error', 'log', 'verbose','warn'],
   });
   app.setGlobalPrefix('api');
   app.enableVersioning({

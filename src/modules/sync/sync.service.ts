@@ -23,7 +23,8 @@ export class SyncService {
 
   private readonly rateLimitInfo;
   private readonly logger = new Logger(SyncService.name);
-
+  private isPaused = false;
+  private abortController: AbortController;
   constructor(
     private readonly productService: ProductService,
     private readonly apiService: ApiService,
@@ -41,6 +42,18 @@ export class SyncService {
       this.RATE_LIMIT_PER_MINUTE,
       this.API_BATCH_SIZE,
     );
+    this.abortController = new AbortController();
+    this.initSync();
+  }
+
+  async initSync() {
+    const syncSettings = await this.prisma.synSettings.upsert({
+      where: { id: 1 },
+      update: {},
+      create: { enable: true },
+    });
+    this.isPaused = !syncSettings.enable;
+    this.logger.log(`Sync Enabled : ${!this.isPaused} `);
     this.processNextBatch();
   }
 
@@ -59,10 +72,34 @@ export class SyncService {
     this._fetchInventoryForDays(30);
   }
 
+  async pauseSync(forced: boolean) {
+    this.isPaused = true;
+    if (forced && this.abortController) {
+      this.abortController.abort(); // 🔥 Cancel all ongoing requests!
+      this.logger.warn('Sync forcibly paused. Aborted ongoing requests.');
+    }
+    await this.prisma.synSettings.updateMany({
+      data: { enable: false },
+    });
+    this.logger.warn(`Sync Paused ${forced ? '(forced)' : ''}`);
+
+    return { message: `Sync Paused ${forced ? '(forced)' : ''}` };
+  }
+
+  async resumeSync() {
+    this.isPaused = false;
+    await this.prisma.synSettings.updateMany({
+      data: { enable: true },
+    });
+    this.logger.warn('Sync resumed.');
+    return { message: `Sync Resumed` };
+  }
+
   private async _fetchInventoryForDays(
     days: number,
     skipDays: number = 1,
   ): Promise<void> {
+    if (this.isPaused) return;
     this.logger.warn(`Triggered: Fetching inventory for ${days} days`);
 
     const products: IProduct[] = await this.productService.getAllProducts();
@@ -115,30 +152,32 @@ export class SyncService {
   }
 
   async processNextBatch() {
-    while (true) {
+    while (!this.isPaused) {
       const tasks: IQueueTask[] = await this.queueService.getNextBatch(
         this.API_BATCH_SIZE,
         3000,
       );
-  
+
       if (!tasks.length) {
         this.logger.log('No tasks found, retrying after delay...');
         await delay(2000);
         continue; // Retry without breaking the loop
       }
-  
+
       this.logger.debug(`Processing ${tasks.length} task(s)`);
       const startTime = Date.now();
-  
+
       await this._processBatch(tasks);
-      
-      const adjustedDelay = calculateAdjustedDelay(startTime, this.rateLimitInfo);
+
+      const adjustedDelay = calculateAdjustedDelay(
+        startTime,
+        this.rateLimitInfo,
+      );
       this.logger.log(`Waiting for ${adjustedDelay}ms.....`);
-  
+
       await delay(adjustedDelay);
     }
   }
-  
 
   private async _processBatch(tasks) {
     const batchResults = await Promise.allSettled(
@@ -147,6 +186,7 @@ export class SyncService {
           this.apiService.fetchInventoryData(
             task.payload.product.productId,
             task.payload.date,
+            this.abortController.signal,
           ),
         ),
       ),

@@ -21,15 +21,16 @@ export class ApiService {
     this.partnerApiToken = this.cs.get<string>('partnerApiToken');
   }
 
-  fetchInventoryData(productId: number, dateString: string): Observable<any> {
+  fetchInventoryData(productId: number, dateString: string,signal:AbortSignal): Observable<any> {
     const url = `${this.partnerApi}/${productId}?date=${dateString}`;
     const config: AxiosRequestConfig = {
       url,
       headers: {
         'x-api-key': this.partnerApiToken,
       },
+      signal
     };
-    return this.httpService.get(url, config).pipe(
+    return this.httpService.get(url, config,).pipe(
       map((res) => res.data),
       map((data) => ({ data, productId, date: dateString })),
     );
