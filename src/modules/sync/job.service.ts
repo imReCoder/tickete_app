@@ -16,12 +16,11 @@ export class JobService {
   ) {}
 
   // Every 15 minutes for today
-  @Cron("*/10 * * * * *", {
+  @Cron("0 */15 * * * *", {
     name: EJobs.JOB_15_MINUTES,
   })
   on15MinutesTrigger() {
-    // this.syncService.syncInventroyDataForToday();
-    this.syncService.syncInventroyDataForNext7Days();
+    this.syncService.syncInventroyDataForToday();
 
   }
 
