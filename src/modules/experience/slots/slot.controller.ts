@@ -10,8 +10,8 @@ export class SlotController {
   }
 
   @Get('/:id/dates')
-  getDates(@Param('id') productId: number, @Query('date') dateString) {
-    return this.slotService.getDates(Number(productId), dateString);
+  getDates(@Param('id') productId: number) {
+    return this.slotService.getDates(Number(productId));
   }
 
 }

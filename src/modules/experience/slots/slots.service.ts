@@ -50,10 +50,17 @@ export class SlotsService {
     });
   }
 
-  async getDates(productId: number, date: string) {
+  async getDates(productId: number) {
+    const today = dayjs().format('YYYY-MM-DD'); // Convert to string
+    const twoMonthsLater = dayjs().add(2, 'months').format('YYYY-MM-DD'); // Convert to string
+
     const uniqueDatesWithPrice = await this.prisma.slots.findMany({
       where: {
         productId,
+        startDate: {
+          gte: today, // Greater than or equal to today
+          lt: twoMonthsLater, // Less than two months from today
+        },
       },
       select: {
         startDate: true,
