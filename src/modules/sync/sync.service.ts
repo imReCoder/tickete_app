@@ -59,18 +59,19 @@ export class SyncService {
     this.logger.warn(`Triggered: Fetching inventory for ${days} days`);
 
     const products = await this.productService.getAllProducts();
-    this.logger.log(`Total products available: ${products.length}`);
+    this.logger.log(`[${days } Day] Total products available: ${products.length}`);
 
     const upcomingDays = this._generateUpcomingDays(days, skipDays);
 
     for (const date of upcomingDays) {
-      await this._processProductsForDate(products, date);
+      await this._processProductsForDate(products, date,days);
     }
   }
 
   private async _processProductsForDate(
     products: any[],
     date: dayjs.Dayjs,
+    days:number
   ): Promise<void> {
     const dayName = date.format('ddd');
     const formattedDate = date.format('YYYY-MM-DD');
@@ -81,21 +82,22 @@ export class SyncService {
 
     if (availableProducts.length === 0) {
       this.logger.log(
-        `Skipping ${formattedDate} (${dayName}) - No products available`,
+        `[${days } Day] Skipping ${formattedDate} (${dayName}) - No products available`,
       );
       return;
     }
 
-    await this._addProductsToQueue(availableProducts, formattedDate);
+    await this._addProductsToQueue(availableProducts, formattedDate,days);
   }
 
   private async _addProductsToQueue(
     products: any[],
     formattedDate: string,
+    days:number
   ): Promise<void> {
     for (const product of products) {
       const taskId = this.getTaskId(product.productId, formattedDate);
-      this.logger.debug(`Adding product to queue: ${taskId}`);
+      this.logger.debug(`[${days } Day]Adding product to queue: ${taskId}`);
       this.queueService.addToQueue(taskId, { product, date: formattedDate });
     }
   }
@@ -104,8 +106,13 @@ export class SyncService {
     this.queueService
       .getNextBatch(this.API_BATCH_SIZE, 3000)
       .then(async (tasks) => {
-        console.log(`Processing `, tasks);
+        if(!tasks.length)return;
+        this.logger.debug(`Processing ${tasks.length} task`);
+        const startTime = Date.now(); 
         await this._processBatch(tasks);
+        const processingTime = Date.now() - startTime; // Calculate processing time
+        const adjustedDelay = Math.max(0, this.rateLimitInfo.delayPerBatch - processingTime);
+        await this.delay(adjustedDelay);
         this.processNextBatch();
       });
   }
@@ -129,9 +136,7 @@ export class SyncService {
     this.logger.log(
       `Processed  | Fetched : ${successfulData.length} data , Total : ${tasks.length} | Remaining : ${this.queueService.getQueueLength()}`,
     );
-    console.log('success data ', successfulData);
     await this.syncApiData(successfulData);
-    await this.delay(this.rateLimitInfo.delayPerBatch);
   }
 
   private async syncApiData(apiData: any[]) {
