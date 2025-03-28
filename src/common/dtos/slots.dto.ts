@@ -55,9 +55,9 @@ export class PaxAvailibilityDto {
   @IsInt()
   max:number
 
-  // @ValidateNested()
-  // @Type(() => PriceDto)
-  // price: PriceDto;
+  @ValidateNested()
+  @Type(() => PriceDto)
+  price: PriceDto;
 }
 
 export class SlotDto {

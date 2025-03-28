@@ -8,14 +8,14 @@ export class JobService {
   constructor(private readonly syncService: SyncService,private schedulerRegistry: SchedulerRegistry) {}
 
   // Every 5 second for today
-  @Cron(CronExpression.EVERY_MINUTE, {
+  @Cron(CronExpression.EVERY_10_SECONDS, {
     name: EJobs.JOB_10_SECONDS,
   })
   onEverySecondTrigger() {
     // this.syncService.syncInventroyDataForToday();
 
     // this.syncService.syncInventroyDataForNext7Days();
-    // this.syncService.syncInventroyDataForNext7Days()
+    this.syncService.syncInventroyDataForNext7Days()
   }
 
   // Every 15 minutes for today

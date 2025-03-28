@@ -57,19 +57,18 @@ model PaxAvailibility {
   min         Int?
   max         Int?
   Slots       Slots   @relation(fields: [slotId], references: [providerSlotId], onDelete: Cascade)
-  // price       Price   @relation(fields: [priceId], references: [id])
-  // priceId     Int
+  price       Price?   
 
   @@unique([slotId, type])
   @@index([slotId, type])
 }
 
 model Price {
-  id            Int    @id @default(autoincrement())
-  finalPrice    Int
-  currencyCode  String
-  originalPrice Int
-  // PaxAvailibility PaxAvailibility[]
+  id              Int              @id
+  finalPrice      Int
+  currencyCode    String
+  originalPrice   Int
+  PaxAvailibility PaxAvailibility @relation(fields: [id], references: [id],onDelete: Cascade)
 }
 
 model SyncLog {
