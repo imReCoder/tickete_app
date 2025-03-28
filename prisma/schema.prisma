@@ -31,40 +31,45 @@ model Partner {
 }
 
 model Product {
-  id Int @id @default(autoincrement())
-  productId Int @unique()
-  days String 
+  id        Int    @id @default(autoincrement())
+  productId Int    @unique()
+  days      String
 }
 
 model Slots {
-  providerSlotId  String              @id
+  providerSlotId  String            @id
   productId       Int
   startTime       String
   startDate       String
   remaining       Int
   paxAvailibility PaxAvailibility[]
-  
+
   @@unique([productId, startDate, startTime]) // Ensure uniqueness
-  @@index([productId, startDate, startTime])  // Indexing for fast lookups
 }
 
 model PaxAvailibility {
   id          Int     @id @default(autoincrement())
+  slotId      String
+  remaining   Int
   type        String
   name        String?
-  description String?
-  price       Price   @relation(fields: [priceId], references: [id])
-  Slots       Slots?  @relation(fields: [slotsId], references: [providerSlotId])
-  slotsId     String
-  priceId     Int
+  description String
+  min         Int?
+  max         Int?
+  Slots       Slots   @relation(fields: [slotId], references: [providerSlotId], onDelete: Cascade)
+  // price       Price   @relation(fields: [priceId], references: [id])
+  // priceId     Int
+
+  @@unique([slotId, type])
+  @@index([slotId, type])
 }
 
 model Price {
-  id              Int               @id @default(autoincrement())
-  finalPrice      Int
-  currencyCode    String
-  originalPrice   Int
-  PaxAvailibility PaxAvailibility[]
+  id            Int    @id @default(autoincrement())
+  finalPrice    Int
+  currencyCode  String
+  originalPrice Int
+  // PaxAvailibility PaxAvailibility[]
 }
 
 model SyncLog {

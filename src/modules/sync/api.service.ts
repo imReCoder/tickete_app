@@ -40,9 +40,9 @@ export class ApiService {
     // }else{
     //   return of({data:[],productId})
     // }
-if(productId==14){
-  return this.httpService.get(url,config).pipe(map(res=>res.data),map(data=>({data:data[0]?[data[0]]:[],productId,date:dateString})));
-}
+// if(productId==14){
+//   return this.httpService.get(url,config).pipe(map(res=>res.data),map(data=>({data:data[0]?[data[0]]:[],productId,date:dateString})));
+// }
     return this.httpService.get(url,config).pipe(map(res=>res.data),map(data=>({data,productId,date:dateString})));
   }
 }

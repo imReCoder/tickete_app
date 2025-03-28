@@ -19,24 +19,48 @@ class PriceDto {
   currencyCode: string;
 }
 
-class PaxAvailibilityDto {
+export class PaxAvailibilityDto {
+  @Expose()
+  @IsOptional()
+  @IsString()
+  slotId:string
+
+  @Expose()
+  @IsInt()
+  remaining: string;
+
+  @Expose()
   @IsString()
   type: string;
 
+  @Expose()
   @IsOptional()
   @IsString()
   name?: string;
 
+  @Expose()
   @IsOptional()
   @IsString()
   description?: string;
 
-  @ValidateNested()
-  @Type(() => PriceDto)
-  price: PriceDto;
+
+
+  @Expose()
+  @IsOptional()
+  @IsInt()
+  min:number
+
+  @Expose()
+  @IsOptional()
+  @IsInt()
+  max:number
+
+  // @ValidateNested()
+  // @Type(() => PriceDto)
+  // price: PriceDto;
 }
 
-export class CreateSlotDto {
+export class SlotDto {
   
   @Expose()
   @IsString()

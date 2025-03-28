@@ -10,7 +10,7 @@ import configuration from './config/configuration';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({load:[configuration]}),
+    ConfigModule.forRoot({ load: [configuration], isGlobal: true }),
     SyncModule,
     PrismaModule,
     ProductModule,
