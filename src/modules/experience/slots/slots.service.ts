@@ -1,10 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger,HttpException,HttpStatus } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import * as dayjs from 'dayjs';
 import { PaxAvailibilityDto, SlotDto } from 'src/common/dtos/slots.dto';
 import { PrismaService } from 'src/modules/database/prisma.service';
-
 @Injectable()
 export class SlotsService {
   private logger = new Logger(SlotsService.name);
@@ -12,15 +12,31 @@ export class SlotsService {
   constructor(private prisma: PrismaService) {}
 
   getSlots(productId: number, date: string) {
-    // TODO : validation
+    if (!Number.isInteger(productId) || productId <= 0) {
+      throw new HttpException('Invalid productId. It should be a positive integer.',HttpStatus.BAD_REQUEST);
+    }
+
+    // Validate date format (YYYY-MM-DD)
+    if (!dayjs(date, 'YYYY-MM-DD', true).isValid()) {
+      throw new HttpException('Invalid date format. Expected format: YYYY-MM-DD.',HttpStatus.BAD_REQUEST);
+    }
     return this.prisma.slots.findMany({
       where: {
         productId: productId,
         startDate: date,
       },
-      include: {
+      select: {
+        startTime: true,
+        startDate: true,
+        remaining: true,
         paxAvailibility: {
-          include: {
+          select: {
+            type: true,
+            name: true,
+            description: true,
+            min: true,
+            max: true,
+            remaining: true,
             price: true,
           },
         },
@@ -28,120 +44,134 @@ export class SlotsService {
     });
   }
 
-  async getDates(productId:number,date:string){
+  async getDates(productId: number, date: string) {
     const uniqueDatesWithPrice = await this.prisma.slots.findMany({
+      where:{
+        productId,
+      },
       select: {
-        startDate: true,  // Get unique dates
+        startDate: true,
         paxAvailibility: {
           select: {
             price: {
               select: {
                 finalPrice: true,
                 currencyCode: true,
-                originalPrice: true
-              }
-            }
-          }
-        }
+                originalPrice: true,
+              },
+            },
+          },
+          take: 1,
+        },
       },
-      distinct: ['startDate'] // Ensure unique dates
+      distinct: ['startDate'], // Ensures unique dates
     });
-    return uniqueDatesWithPrice;
+
+    const result = uniqueDatesWithPrice.map((item) => ({
+      startDate: item.startDate,
+      price: item.paxAvailibility?.[0]?.price ?? null,
+    }));
+
+    return result;
   }
 
   async bulkUpsertSlots(
     slotsBatch: { data: any[]; productId: number; date: string }[],
     batchSize: number = 50,
   ) {
-    const allSlots: any[] = Array.from(
-      slotsBatch
-        .flatMap(({ productId, data }) =>
-          data.map((slot) => ({ ...slot, productId })),
-        )
-        .reduce((acc, slot) => {
-          acc.set(slot.providerSlotId, slot); // Store unique slots using providerSlotId as the key
-          return acc;
-        }, new Map())
-        .values(),
-    );
-
-    this.logger.log(`${allSlots.length} unique slots`);
-    const allProductIds = Array.from(
-      new Set(slotsBatch.map((slot) => slot.productId)),
-    );
-    const allDates = Array.from(new Set(slotsBatch.map((slot) => slot.date)));
-
-    // Process slots in batches
-    await Promise.all(
-      this.chunkArray(allSlots, batchSize).map((batch) =>
-        this.bulkUpsertSlotsIntoDb(
-          batch.map((slot) => this.convertToDto<SlotDto>(slot, SlotDto)),
-        ),
-      ),
-    );
-
-    const paxData: PaxAvailibilityDto[] = allSlots.flatMap((slot) => {
-      const slotData = allSlots.find(
-        (s) => s.providerSlotId === slot.providerSlotId,
+    try {
+      const allSlots: any[] = Array.from(
+        slotsBatch
+          .flatMap(({ productId, data }) =>
+            data.map((slot) => ({ ...slot, productId })),
+          )
+          .reduce((acc, slot) => {
+            acc.set(slot.providerSlotId, slot); // Store unique slots using providerSlotId as the key
+            return acc;
+          }, new Map())
+          .values(),
       );
-      return slotData.paxAvailability.map((pax) => ({
-        slotId: slot.providerSlotId,
-        remaining: pax.remaining,
-        type: pax.type,
-        description: pax.description,
-        name: pax.name ?? Prisma.raw('NULL'),
-        min: pax.min ?? Prisma.raw('NULL'),
-        max: pax.max ?? Prisma.raw('NULL'),
-        price: pax.price,
-      }));
-    });
 
-    // Process pax in batches
-    const upsertedPax = await Promise.all(
-      this.chunkArray(paxData, batchSize).map((batch) =>
-        this.bulkUpsertPaxAvailibility(
-          batch.map((slot) =>
-            this.convertToDto<PaxAvailibilityDto>(slot, PaxAvailibilityDto),
+      this.logger.log(`${allSlots.length} unique slots`);
+      const allProductIds = Array.from(
+        new Set(slotsBatch.map((slot) => slot.productId)),
+      );
+      const allDates = Array.from(new Set(slotsBatch.map((slot) => slot.date)));
+
+      // Process slots in batches
+      await Promise.all(
+        this.chunkArray(allSlots, batchSize).map((batch) =>
+          this.bulkUpsertSlotsIntoDb(
+            batch.map((slot) => this.convertToDto<SlotDto>(slot, SlotDto)),
           ),
         ),
-      ),
-    );
-
-    const flatPaxList = upsertedPax.flat(); // Flatten array of arrays
-    // Prepare Price Data
-    const priceData = flatPaxList.flatMap((pax: any) => {
-      const originalPax = paxData.find(
-        (p) => p.slotId === pax.slotId && p.type === pax.type,
       );
 
-      if (originalPax?.price) {
-        return [
-          {
-            id: pax.id, // Newly inserted Pax ID
-            finalPrice: originalPax.price.finalPrice,
-            currencyCode: originalPax.price.currencyCode,
-            originalPrice: originalPax.price.originalPrice,
-          },
-        ];
-      }
-      return [];
-    });
+      const paxData: PaxAvailibilityDto[] = allSlots.flatMap((slot) => {
+        const slotData = allSlots.find(
+          (s) => s.providerSlotId === slot.providerSlotId,
+        );
+        return slotData.paxAvailability.map((pax) => ({
+          slotId: slot.providerSlotId,
+          remaining: pax.remaining,
+          type: pax.type,
+          description: pax.description,
+          name: pax.name ?? Prisma.raw('NULL'),
+          min: pax.min ?? Prisma.raw('NULL'),
+          max: pax.max ?? Prisma.raw('NULL'),
+          price: pax.price,
+        }));
+      });
 
-    //  Upsert Price Data
-    await Promise.all(
-      this.chunkArray(priceData, batchSize).map((batch) =>
-        this.bulkUpsertPrice(batch),
-      ),
-    );
+      // Process pax in batches
+      const upsertedPax = await Promise.all(
+        this.chunkArray(paxData, batchSize).map((batch) =>
+          this.bulkUpsertPaxAvailibility(
+            batch.map((slot) =>
+              this.convertToDto<PaxAvailibilityDto>(slot, PaxAvailibilityDto),
+            ),
+          ),
+        ),
+      );
 
-    // Delete additional slots not in the upserted batch
-    const slotsIdToKeep = allSlots.map((s) => s.providerSlotId);
-    await this.bulkDeleteAdditionalSlots(
-      slotsIdToKeep,
-      allProductIds,
-      allDates,
-    );
-    this.logger.log(`${allSlots.length} slots processd.`);
+      const flatPaxList = upsertedPax.flat(); // Flatten array of arrays
+      // Prepare Price Data
+      const priceData = flatPaxList.flatMap((pax: any) => {
+        const originalPax = paxData.find(
+          (p) => p.slotId === pax.slotId && p.type === pax.type,
+        );
+
+        if (originalPax?.price) {
+          return [
+            {
+              id: pax.id, // Newly inserted Pax ID
+              finalPrice: originalPax.price.finalPrice,
+              currencyCode: originalPax.price.currencyCode,
+              originalPrice: originalPax.price.originalPrice,
+            },
+          ];
+        }
+        return [];
+      });
+
+      //  Upsert Price Data
+      await Promise.all(
+        this.chunkArray(priceData, batchSize).map((batch) =>
+          this.bulkUpsertPrice(batch),
+        ),
+      );
+
+      // Delete additional slots not in the upserted batch
+      const slotsIdToKeep = allSlots.map((s) => s.providerSlotId);
+      await this.bulkDeleteAdditionalSlots(
+        slotsIdToKeep,
+        allProductIds,
+        allDates,
+      );
+      this.logger.log(`${allSlots.length} slots processd.`);
+    } catch (e) {
+      this.logger.error(`Error in processing batch :`, e.message);
+    }
   }
 
   private async bulkUpsertSlotsIntoDb(slots: SlotDto[]) {
@@ -195,7 +225,6 @@ export class SlotsService {
   ) {
     if (!priceData.length) return;
 
-
     const result = await this.prisma.$queryRaw`
       INSERT INTO "Price" ("id", "finalPrice", "currencyCode", "originalPrice")
       VALUES ${Prisma.join(
@@ -209,7 +238,6 @@ export class SlotsService {
           "currencyCode" = EXCLUDED."currencyCode",
           "originalPrice" = EXCLUDED."originalPrice";
     `;
-
   }
 
   private async bulkDeleteAdditionalSlots(

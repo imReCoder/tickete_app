@@ -12,10 +12,7 @@ export class JobService {
     name: EJobs.JOB_10_SECONDS,
   })
   onEverySecondTrigger() {
-    // this.syncService.syncInventroyDataForToday();
-
-    // this.syncService.syncInventroyDataForNext7Days();
-    this.syncService.syncInventroyDataForNext7Days()
+    // this.syncService.syncInventroyDataForNext7Days()
   }
 
   // Every 15 minutes for today
@@ -24,7 +21,7 @@ export class JobService {
   })
   on15MinutesTrigger() {
     console.log('30 Minutes triggered');
-    this.syncService.syncInventoryDataForNext30Days()
+    // this.syncService.syncInventoryDataForNext30Days()
 
   }
 
