@@ -16,10 +16,12 @@ export class JobService {
   ) {}
 
   // Every 15 minutes for today
-  @Cron(CronExpression.EVERY_30_MINUTES, {
+  @Cron(CronExpression.EVERY_30_SECONDS, {
     name: EJobs.JOB_15_MINUTES,
   })
   on15MinutesTrigger() {
+    // this.syncService.syncInventroyDataForToday();
+
     this.syncService.syncInventroyDataForNext7Days();
   }
 
@@ -27,7 +29,9 @@ export class JobService {
   @Cron(CronExpression.EVERY_4_HOURS, {
     name: EJobs.JOB_4_HOURS,
   })
-  on4HoursTrigger() {}
+  on4HoursTrigger() {
+    this.syncService.syncInventroyDataForNext7Days();
+  }
 
   // Every 1 day for next 30 days
   @Cron(CronExpression.EVERY_DAY_AT_10AM, {
@@ -36,5 +40,4 @@ export class JobService {
   on1DayTrigger() {
     this.syncService.syncInventoryDataForNext30Days();
   }
-
 }

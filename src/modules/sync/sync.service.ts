@@ -8,6 +8,13 @@ import { firstValueFrom } from 'rxjs';
 import { SlotsService } from '../experience/slots/slots.service';
 import { ConfigService } from '@nestjs/config';
 import { IConfiguration } from 'src/common/interfaces/configuration.interface';
+import {
+  calculateAdjustedDelay,
+  delay,
+  getTaskId,
+} from 'src/common/utils/common.util';
+import { IProduct } from 'src/common/interfaces/product.interface';
+import { IQueueTask } from 'src/common/interfaces/sync.interface';
 
 @Injectable()
 export class SyncService {
@@ -58,20 +65,22 @@ export class SyncService {
   ): Promise<void> {
     this.logger.warn(`Triggered: Fetching inventory for ${days} days`);
 
-    const products = await this.productService.getAllProducts();
-    this.logger.log(`[${days } Day] Total products available: ${products.length}`);
+    const products: IProduct[] = await this.productService.getAllProducts();
+    this.logger.log(
+      `[${days} Day] Total products available: ${products.length}`,
+    );
 
     const upcomingDays = this._generateUpcomingDays(days, skipDays);
 
     for (const date of upcomingDays) {
-      await this._processProductsForDate(products, date,days);
+      await this._processProductsForDate(products, date, days);
     }
   }
 
   private async _processProductsForDate(
-    products: any[],
+    products: IProduct[],
     date: dayjs.Dayjs,
-    days:number
+    days: number,
   ): Promise<void> {
     const dayName = date.format('ddd');
     const formattedDate = date.format('YYYY-MM-DD');
@@ -82,44 +91,58 @@ export class SyncService {
 
     if (availableProducts.length === 0) {
       this.logger.log(
-        `[${days } Day] Skipping ${formattedDate} (${dayName}) - No products available`,
+        `[${days} Day] Skipping ${formattedDate} (${dayName}) - No products available`,
       );
       return;
     }
 
-    await this._addProductsToQueue(availableProducts, formattedDate,days);
+    await this._addProductsToQueue(availableProducts, formattedDate, days);
   }
 
   private async _addProductsToQueue(
-    products: any[],
+    products: IProduct[],
     formattedDate: string,
-    days:number
+    days: number,
   ): Promise<void> {
     for (const product of products) {
-      const taskId = this.getTaskId(product.productId, formattedDate);
-      this.logger.debug(`[${days } Day]Adding product to queue: ${taskId}`);
+      const taskId = getTaskId(product.productId, formattedDate);
+      const dayName = dayjs(formattedDate).format('ddd');
+      this.logger.debug(
+        `[${days} Day] [${dayName}] Adding product to queue: ${taskId}`,
+      );
       this.queueService.addToQueue(taskId, { product, date: formattedDate });
     }
   }
 
-  processNextBatch() {
-    this.queueService
-      .getNextBatch(this.API_BATCH_SIZE, 3000)
-      .then(async (tasks) => {
-        if(!tasks.length)return;
-        this.logger.debug(`Processing ${tasks.length} task`);
-        const startTime = Date.now(); 
-        await this._processBatch(tasks);
-        const processingTime = Date.now() - startTime; // Calculate processing time
-        const adjustedDelay = Math.max(0, this.rateLimitInfo.delayPerBatch - processingTime);
-        await this.delay(adjustedDelay);
-        this.processNextBatch();
-      });
+  async processNextBatch() {
+    while (true) {
+      const tasks: IQueueTask[] = await this.queueService.getNextBatch(
+        this.API_BATCH_SIZE,
+        3000,
+      );
+  
+      if (!tasks.length) {
+        this.logger.log('No tasks found, retrying after delay...');
+        await delay(2000);
+        continue; // Retry without breaking the loop
+      }
+  
+      this.logger.debug(`Processing ${tasks.length} task(s)`);
+      const startTime = Date.now();
+  
+      await this._processBatch(tasks);
+      
+      const adjustedDelay = calculateAdjustedDelay(startTime, this.rateLimitInfo);
+      this.logger.log(`Waiting for ${adjustedDelay}ms.....`);
+  
+      await delay(adjustedDelay);
+    }
   }
+  
 
   private async _processBatch(tasks) {
     const batchResults = await Promise.allSettled(
-      tasks.map((task) =>
+      tasks.map((task: IQueueTask) =>
         firstValueFrom(
           this.apiService.fetchInventoryData(
             task.payload.product.productId,
@@ -154,15 +177,5 @@ export class SyncService {
     const batchesPerMinute = Math.floor(rateLimitPerMinute / maxPossibleBatch);
     const delayPerBatch = (60 / batchesPerMinute) * 1000;
     return { maxPossibleBatch, batchesPerMinute, delayPerBatch };
-  }
-
-  // move to utility
-  private async delay(ms) {
-    this.logger.log(`Waiting for ${ms}ms.....`);
-    return await new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  private getTaskId(productId: number, dateString: string) {
-    return `${productId}_${dateString}`;
   }
 }

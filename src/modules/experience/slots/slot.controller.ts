@@ -1,7 +1,7 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { SlotsService } from './slots.service';
 
-@Controller('experience')
+@Controller({path:'experience',version:'1'})
 export class SlotController {
   constructor(private slotService: SlotsService) {}
   @Get('/:id/slots')
