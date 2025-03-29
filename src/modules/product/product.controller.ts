@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { ProductService } from './product.service';
 
-@Controller('product')
+@Controller({path:'product',version:'1'})
 export class ProductController {
   constructor(private readonly productService: ProductService) {}
 
