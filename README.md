@@ -74,8 +74,9 @@ Create a `.env` file in the root directory with the following variables:
 
 ![alt text](https://github.com/imReCoder/tickete_app/blob/master/fow.png)
 
-## 🔧 Improvements
-
+## 🏗️ Future Enhancements
+- Retry mechanism for failed sync attempts.
+- Adding unit test cases
 - Instead of an in-memory queue service, we can use **BullMQ** for better scalability. (For demo purposes, a simple in-memory queue was used.)
 - Instead of raw queries, we can use **stored procedures** for better performance.
 
